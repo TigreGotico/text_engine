@@ -527,5 +527,4 @@ class EldritchEscape(IFGameEngine):
 
 
 if __name__ == "__main__":
-    en_path = "/home/miro/PycharmProjects/textgames/eldricht_escape"
-    EldritchEscape(locale_directory=en_path, lang="en").run()
+    EldritchEscape(locale_directory=os.path.dirname(__file__), lang="en").run()
