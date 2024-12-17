@@ -55,7 +55,8 @@ Here are some commands to guide your experience:
 
 > You look at the painting. 
 > The sea of tentacles in the painting seems endless, stretching beneath a sky poisoned with yellow. You swear one tentacle subtly moves, as if alive..  
-> **Your mind shatters like glass. Sanity: 0/10.**  
+> **Your vision blurs, and the walls seem to close in. Your mind shatters like glass. You are lost to madness.**
+> **Sanity: 0/10.**  
 > **Game Over. The void consumes all.**  
 
 ---
