@@ -39,6 +39,7 @@ class TheCursedRoom(GameScene):
         self.cassette = Keyword.from_file(os.path.join(kw_path, "cassette.voc"))
 
         # Intents for interacting with the scene
+        # TODO - repair_intent, increase player frustration if they try to put back mirror/painting/book/cassette
         look_intent = KeywordIntent(
             name="look",
             required=[self.builtin.look],
