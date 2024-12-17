@@ -4,12 +4,7 @@ from typing import List, Dict, Tuple, Optional, Callable
 
 from json_database import JsonStorage
 
-try:
-    from quebra_frases import word_tokenize
-except ImportError:
-    def word_tokenize(text: str, *args, **kwargs) -> List[str]:
-        return text.split()
-
+from text_engine.utils import load_template_file
 
 DEBUG = False  # just a helper during development
 
@@ -40,8 +35,7 @@ class Keyword:
     @classmethod
     def from_file(cls, path: str) -> 'Keyword':
         name = path.split("/")[-1].split(".voc")[0]
-        with open(path) as f:
-            samples = [l for l in f.read().split("\n") if l]
+        samples = load_template_file(path)
         if DEBUG:
             print(f"   - DEBUG: loaded keyword from file: {name} / {samples}")
         return Keyword(name=name, samples=samples)
@@ -50,8 +44,7 @@ class Keyword:
         path = os.path.join(directory, self.file_path)
         if os.path.isfile(path):
             self.name = path.split("/")[-1].split(".voc")[0]
-            with open(path) as f:
-                self.samples = [l for l in f.read().split("\n") if l]
+            self.samples = load_template_file(path)
 
     def match(self, utterance: str) -> bool:
         return any([s.lower() in utterance.lower()
@@ -176,7 +169,7 @@ class IntentEngine:
         self.intents[intent.name] = intent
         if DEBUG:
             print(f"    - DEBUG: registering intent: {intent.name}")
-        #if self.cache:
+        # if self.cache:
         #    intent.save(self.cache)
 
     def deregister_intent(self, name: str):
@@ -200,4 +193,3 @@ class BuiltinKeywords:
             self.__setattr__(name, kw)
             if DEBUG:
                 print(f"   - DEBUG: Found builtin keyword: {name} / {samples}")
-

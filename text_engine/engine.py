@@ -2,8 +2,8 @@ import threading
 from dataclasses import dataclass
 from typing import Callable, List, Union, Tuple, Optional
 
-from text_engine.intents import Keyword, KeywordIntent, IntentEngine
 from text_engine.dialog import DialogRenderer
+from text_engine.intents import Keyword, KeywordIntent, IntentEngine
 
 
 @dataclass
