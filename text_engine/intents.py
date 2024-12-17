@@ -3,17 +3,19 @@ from dataclasses import dataclass
 from typing import List, Dict, Tuple, Optional, Callable
 
 from json_database import JsonStorage
-
 from text_engine.utils import load_template_file
 
 DEBUG = False  # just a helper during development
 
-# for typing
+# Type alias for intent handler functions
 IntentHandler = Callable[['IFGameEngine', str], str]
 
 
 @dataclass
 class Keyword:
+    """
+    Represents a keyword with associated sample phrases for matching.
+    """
     name: str
     samples: Optional[List[str]] = None
 
@@ -22,9 +24,15 @@ class Keyword:
 
     @property
     def file_path(self) -> str:
+        """
+        Get the file path where the keyword is saved.
+        """
         return os.path.join("keywords", f"{self.name}.voc")
 
-    def save(self, directory: str):
+    def save(self, directory: str) -> None:
+        """
+        Save the keyword samples to a file in the specified directory.
+        """
         path = os.path.join(directory, self.file_path)
         os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, "w") as f:
@@ -34,25 +42,36 @@ class Keyword:
 
     @classmethod
     def from_file(cls, path: str) -> 'Keyword':
-        name = path.split("/")[-1].split(".voc")[0]
+        """
+        Load a keyword from a file.
+        """
+        name = os.path.basename(path).split(".voc")[0]
         samples = load_template_file(path)
         if DEBUG:
             print(f"   - DEBUG: loaded keyword from file: {name} / {samples}")
-        return Keyword(name=name, samples=samples)
+        return cls(name=name, samples=samples)
 
-    def reload(self, directory: str):
+    def reload(self, directory: str) -> None:
+        """
+        Reload the keyword samples from its file.
+        """
         path = os.path.join(directory, self.file_path)
         if os.path.isfile(path):
-            self.name = path.split("/")[-1].split(".voc")[0]
+            self.name = os.path.basename(path).split(".voc")[0]
             self.samples = load_template_file(path)
 
     def match(self, utterance: str) -> bool:
-        return any([s.lower() in utterance.lower()
-                    for s in self.samples])
+        """
+        Check if any sample in the keyword matches the given utterance.
+        """
+        return any(sample.lower() in utterance.lower() for sample in self.samples)
 
 
 @dataclass
 class KeywordIntent:
+    """
+    Represents an intent defined by required, optional, and excluded keywords.
+    """
     name: str
     required: List[Keyword]
     optional: Optional[List[Keyword]] = None
@@ -65,9 +84,15 @@ class KeywordIntent:
 
     @property
     def file_path(self) -> str:
+        """
+        Get the file path where the intent is saved.
+        """
         return os.path.join("intents", f"{self.name}.json")
 
-    def save(self, directory: str):
+    def save(self, directory: str) -> None:
+        """
+        Save the intent and its associated keywords to files.
+        """
         path = os.path.join(directory, self.file_path)
         os.makedirs(os.path.dirname(path), exist_ok=True)
         db = JsonStorage(path)
@@ -83,12 +108,14 @@ class KeywordIntent:
 
     @classmethod
     def from_file(cls, path: str) -> 'KeywordIntent':
+        """
+        Load an intent from a file.
+        """
         db = JsonStorage(path)
-        required = [Keyword(k) for k in db["required"]]
-        excludes = [Keyword(k) for k in db["excludes"]]
-        optional = [Keyword(k) for k in db["optional"]]
-        intent = KeywordIntent(name=db["name"], required=required,
-                               optional=optional, excludes=excludes)
+        required = [Keyword(name) for name in db["required"]]
+        optional = [Keyword(name) for name in db["optional"]]
+        excludes = [Keyword(name) for name in db["excludes"]]
+        intent = cls(name=db["name"], required=required, optional=optional, excludes=excludes)
         if DEBUG:
             print(f"   - DEBUG: loaded intent from file: {intent.name} / {db}")
         directory = os.path.dirname(os.path.dirname(path))
@@ -96,49 +123,41 @@ class KeywordIntent:
             k.reload(directory=directory)
         return intent
 
-    def reload(self, directory: str):
+    def reload(self, directory: str) -> None:
+        """
+        Reload the intent and its associated keywords from files.
+        """
         path = os.path.join(directory, self.file_path)
         if os.path.isfile(path):
             db = JsonStorage(path)
             self.name = db["name"]
-            self.required = [Keyword(k) for k in db["required"]]
-            self.excludes = [Keyword(k) for k in db["excludes"]]
-            self.optional = [Keyword(k) for k in db["optional"]]
-            # reload keywords from file to also load "samples"
-            for k in self.required + self.excludes + self.optional:
-                k.reload(directory=directory)
+            self.required = [Keyword(name) for name in db["required"]]
+            self.optional = [Keyword(name) for name in db["optional"]]
+            self.excludes = [Keyword(name) for name in db["excludes"]]
+            for kw in self.required + self.optional + self.excludes:
+                kw.reload(directory)
 
     def score(self, utterance: str) -> float:
-        # Check for excluded keywords first
-        if any(ent.match(utterance) for ent in self.excludes):
+        """
+        Calculate a confidence score for matching the given utterance with the intent.
+        """
+        if any(k.match(utterance) for k in self.excludes):
             return 0.0
 
-        # Match required and optional keywords
-        matched_required = sum(1 for ent in self.required if ent.match(utterance))
-        matched_optional = sum(1 for ent in self.optional if ent.match(utterance))
-        total_required = len(self.required)
-        total_optional = len(self.optional)
+        matched_required = sum(1 for k in self.required if k.match(utterance))
+        matched_optional = sum(1 for k in self.optional if k.match(utterance))
 
-        # If not all required keywords are matched, return 0.0
-        if matched_required < total_required:
+        if matched_required < len(self.required):
             return 0.0
 
-        # Scoring based on required and optional matches
-        if total_required > 0 and total_optional > 0:
-            # Blend the contribution of required and optional matches
-            required_score = matched_required / total_required
-            optional_score = matched_optional / total_optional
-            overall_score = 0.8 + (0.2 * optional_score)  # Boost if optional matches
-        else:
-            # Fallback when there are no optional keywords
-            overall_score = 0.8
-
-        # Ensure a minimum score of 0.5 if some required keywords match
-        return max(overall_score, 0.5)
+        optional_score = matched_optional / len(self.optional) if self.optional else 0
+        return max(0.8 + 0.2 * optional_score, 0.5)
 
 
 class IntentEngine:
-    """individual games may subclass this"""
+    """
+    Engine for managing and scoring intents.
+    """
 
     def __init__(self, intent_cache: Optional[str] = None):
         self.intents: Dict[str, KeywordIntent] = {}
@@ -147,32 +166,34 @@ class IntentEngine:
             intents_path = os.path.join(self.cache, "intents")
             if os.path.isdir(intents_path):
                 for fname in os.listdir(intents_path):
-                    if not fname.endswith(".json"):
-                        continue
-                    intent = KeywordIntent.from_file(os.path.join(intents_path, fname))
-                    self.intents[intent.name] = intent
+                    if fname.endswith(".json"):
+                        intent = KeywordIntent.from_file(os.path.join(intents_path, fname))
+                        self.intents[intent.name] = intent
 
     def calc_intents(self, utterance: str) -> List[Tuple[KeywordIntent, float]]:
-        # calc intent + conf
-        candidates = []
-        for name, intent in self.intents.items():
-            score = intent.score(utterance)
-            if score >= 0.5:
-                candidates.append(intent)  # match!
-                if DEBUG:
-                    print(f"    - DEBUG: intent: {name} / {score}")
+        """
+        Calculate matching intents and their scores for the given utterance.
+        """
+        return sorted(
+            [(intent, intent.score(utterance))
+            for intent in self.intents.values()
+            if intent.score(utterance) >= 0.5],
+            key=lambda item: item[1],
+            reverse=True,
+        )
 
-        return sorted([(i, i.score(utterance)) for i in candidates],
-                      key=lambda k: k[1], reverse=True)
-
-    def register_intent(self, intent: KeywordIntent):
+    def register_intent(self, intent: KeywordIntent) -> None:
+        """
+        Register a new intent in the engine.
+        """
         self.intents[intent.name] = intent
         if DEBUG:
-            print(f"    - DEBUG: registering intent: {intent.name}")
-        # if self.cache:
-        #    intent.save(self.cache)
+            print(f"   - DEBUG: registering intent: {intent.name}")
 
-    def deregister_intent(self, name: str):
+    def deregister_intent(self, name: str) -> None:
+        """
+        Deregister an intent by name.
+        """
         if name in self.intents:
             intent = self.intents.pop(name)
             if self.cache:
@@ -182,14 +203,16 @@ class IntentEngine:
 
 
 class BuiltinKeywords:
+    """
+    Handles built-in keywords for a specific language.
+    """
+
     def __init__(self, lang: str):
         self.lang = lang
         self.directory = os.path.join(os.path.dirname(__file__), "locale", lang)
         for fname in os.listdir(self.directory):
-            name = fname.split(".voc")[0]
-            with open(os.path.join(self.directory, fname)) as f:
-                samples = [l for l in f.read().split("\n") if l and not l.startswith("# ")]
-            kw = Keyword(name=name, samples=samples)
-            self.__setattr__(name, kw)
+            name = os.path.splitext(fname)[0]
+            samples = load_template_file(os.path.join(self.directory, fname))
+            setattr(self, name, Keyword(name=name, samples=samples))
             if DEBUG:
                 print(f"   - DEBUG: Found builtin keyword: {name} / {samples}")
