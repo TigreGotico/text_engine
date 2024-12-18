@@ -364,7 +364,7 @@ class TheCursedRoom(GameScene):
 
             items_message = "\n".join(items)
 
-            return f"{room}.\n{items_message}\n{game.get_dialog('random_event')}"
+            return f"{room}.\n{items_message}"
 
     def on_move(self, game: IFGameEngine, utterance: str):
         if self.builtin.painting.match(utterance):
@@ -506,8 +506,17 @@ class EldritchEscape(IFGameEngine):
         callbacks = GameHandlers(on_end=self.on_end, on_start=self.on_start,
                                  on_win=self.on_win, on_lose=self.on_lose,
                                  is_loss=self.is_loss, is_win=self.is_win,
+                                 end_turn=self.on_end_turn,
                                  on_input=on_input, on_print=on_print)
         super().__init__(dialog_renderer=dialog_renderer, scenes=[room], handlers=callbacks)
+
+    def on_end_turn(self, game: IFGameEngine):
+        # destroying the mirror stops random events
+        if "mirror" not in game.active_scene.destroyed:
+            game.speak_dialog('random_event')
+            # random chance of decreasing sanity
+            if random.randint(1, 50) % 4 == 0:
+                game.print(game.active_scene.decrease_sanity(game, 1))
 
     def on_win(self, game: IFGameEngine):
         game.speak_dialog("win")
