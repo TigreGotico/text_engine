@@ -1,5 +1,5 @@
 """simple single scene game with no game objects"""
-from text_engine import (Callbacks, Conditions, GameScene, Keyword, KeywordIntent, GameIntents, IFGameEngine)
+from text_engine import (GameHandlers, GameScene, Keyword, KeywordIntent, GameIntents, IFGameEngine)
 
 
 class TheRoom(GameScene):
@@ -93,11 +93,11 @@ class EscapeRoom(IFGameEngine):
     def __init__(self):
         super().__init__(
             scenes=[TheRoom()],
-            callbacks=Callbacks(on_end=self.on_end,
-                                on_start=self.on_start,
-                                on_win=lambda k: print("Congratulations! You escaped the room."),
-                                on_lose=lambda k: print("You ran out of oxygen and died!")),
-            conditions=Conditions(is_loss=self.is_loss, is_win=self.is_win))
+            handlers=GameHandlers(on_end=self.on_end,
+                                  on_start=self.on_start,
+                                  on_win=lambda k: print("Congratulations! You escaped the room."),
+                                  on_lose=lambda k: print("You ran out of oxygen and died!"),
+                                  is_loss=self.is_loss, is_win=self.is_win))
 
     def on_start(self, game: IFGameEngine):
         game.print("You wake up in a locked room. There is a table with something on it.")

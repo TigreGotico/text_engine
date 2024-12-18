@@ -9,10 +9,10 @@ completely new games can be made by just changing resource files
 import os.path
 import random
 
-from text_engine import (Callbacks, Conditions, GameScene, Keyword, KeywordIntent, GameIntents, IFGameEngine,
-                         IntentEngine)
+from text_engine import GameHandlers, GameScene, Keyword, KeywordIntent, GameIntents, IFGameEngine, IntentEngine
 from text_engine.dialog import DialogRenderer
 from text_engine.intents import BuiltinKeywords
+from text_engine.engine import GetUserInputHandler, PrintOutputHandler
 
 
 class TheCursedRoom(GameScene):
@@ -493,16 +493,21 @@ class TheCursedRoom(GameScene):
 
 
 class EldritchEscape(IFGameEngine):
-    def __init__(self, locale_directory: str, lang: str = "en"):
+    def __init__(self, locale_directory: str, lang: str = "en",
+                 on_input: GetUserInputHandler = lambda g, u: input(u),
+                 on_print: PrintOutputHandler = lambda g, u: print(u)):
+        # on_input and on_print can be used to e.g. wrap the game in a voice interface
         dialog_directory = os.path.join(locale_directory, lang, "dialogs")
         dialog_renderer = DialogRenderer(dialog_directory)
         default_response = dialog_renderer.get_dialog("default") + "\n" + dialog_renderer.get_dialog("help_commands")
 
         room = TheCursedRoom(locale_folder=locale_directory, lang=lang, default_response=default_response)
 
-        callbacks = Callbacks(on_end=self.on_end, on_start=self.on_start, on_win=self.on_win, on_lose=self.on_lose)
-        conditions = Conditions(is_loss=self.is_loss, is_win=self.is_win)
-        super().__init__(dialog_renderer=dialog_renderer, scenes=[room], callbacks=callbacks, conditions=conditions)
+        callbacks = GameHandlers(on_end=self.on_end, on_start=self.on_start,
+                                 on_win=self.on_win, on_lose=self.on_lose,
+                                 is_loss=self.is_loss, is_win=self.is_win,
+                                 on_input=on_input, on_print=on_print)
+        super().__init__(dialog_renderer=dialog_renderer, scenes=[room], handlers=callbacks)
 
     def on_win(self, game: IFGameEngine):
         game.speak_dialog("win")
@@ -528,4 +533,5 @@ class EldritchEscape(IFGameEngine):
 
 
 if __name__ == "__main__":
+    # TODO lang from argparse
     EldritchEscape(locale_directory=os.path.dirname(__file__), lang="en").run()

@@ -5,26 +5,23 @@ from typing import Callable, List, Union, Tuple, Optional
 from text_engine.dialog import DialogRenderer
 from text_engine.intents import Keyword, KeywordIntent, IntentEngine
 
-
-@dataclass
-class Conditions:
-    """
-    Conditions to determine the win/loss state of the game.
-
-    Attributes:
-        is_win: Callable that determines if the game is won.
-        is_loss: Callable that determines if the game is lost.
-    """
-    is_win: Callable[['IFGameEngine'], bool]
-    is_loss: Callable[['IFGameEngine'], bool]
+# Typing aliases
+GetUserInputHandler = Optional[Callable[['IFGameEngine', str], str]]  # args: game, input_prompt
+PrintOutputHandler = Optional[Callable[['IFGameEngine', str], None]]  # args: game, output
+WinConditionCheck = Callable[['IFGameEngine'], bool]
+GameCallbackHandler = Optional[Callable[['IFGameEngine'], None]]
+GameInputCallbackHandler = Optional[Callable[['IFGameEngine', str], None]]  # args: game, input
+GameOutputCallbackHandler = Optional[Callable[['IFGameEngine', str, str], None]]  # args: game, input, output
 
 
 @dataclass
-class Callbacks:
+class GameHandlers:
     """
     Callbacks for various game events.
 
     Attributes:
+        is_win: Callable that determines if the game is won.
+        is_loss: Callable that determines if the game is lost.
         on_start: Called before the first game turn.
         on_win: Called when the game is won.
         on_lose: Called when the game is lost.
@@ -34,16 +31,22 @@ class Callbacks:
         before_turn: Called before each game turn.
         end_turn: Called after each game turn, before advancing.
         after_turn: Called after each game turn, after advancing.
+        on_input: Called when the game wants to get user input
+        on_print: Called when the game wants to output text
     """
-    on_start: Optional[Callable[['IFGameEngine'], None]] = None
-    on_win: Optional[Callable[['IFGameEngine'], None]] = None
-    on_lose: Optional[Callable[['IFGameEngine'], None]] = None
-    on_end: Optional[Callable[['IFGameEngine'], None]] = None
-    before_interaction: Optional[Callable[['IFGameEngine', str], None]] = None
-    after_interaction: Optional[Callable[['IFGameEngine', str, str], None]] = None
-    before_turn: Optional[Callable[['IFGameEngine'], None]] = None
-    end_turn: Optional[Callable[['IFGameEngine'], None]] = None
-    after_turn: Optional[Callable[['IFGameEngine'], None]] = None
+    is_win: WinConditionCheck
+    is_loss: WinConditionCheck
+    on_start: GameCallbackHandler = None
+    on_win: GameCallbackHandler = None
+    on_lose: GameCallbackHandler = None
+    on_end: GameCallbackHandler = None
+    before_interaction: GameInputCallbackHandler = None
+    after_interaction: GameOutputCallbackHandler = None
+    before_turn: GameCallbackHandler = None
+    end_turn: GameCallbackHandler = None
+    after_turn: GameCallbackHandler = None
+    on_input: GetUserInputHandler = lambda g, u: input(u)  # allow games to get user input their own way
+    on_print: PrintOutputHandler = lambda g, u: print(u)  # allow games to handle print their own way
 
 
 @dataclass
@@ -167,21 +170,18 @@ class IFGameEngine(threading.Thread):
 
     Attributes:
         scenes: List of game scenes.
-        conditions: Conditions for winning or losing the game.
-        callbacks: Event callbacks.
+        handlers: Event callbacks.
         dialog_renderer: Renderer for dialog texts.
     """
 
     def __init__(self,
                  scenes: List['GameScene'],
-                 conditions: Conditions,
-                 callbacks: Callbacks = Callbacks(),
+                 handlers: GameHandlers,
                  dialog_renderer: Optional[DialogRenderer] = None):
         super().__init__()
         self.current_turn: int = 1
         self.scenes = scenes
-        self.callbacks = callbacks
-        self.checks = conditions
+        self.handlers = handlers
         self.running = threading.Event()
         self._active_scene = 0
         self.dialog_renderer = dialog_renderer
@@ -189,8 +189,7 @@ class IFGameEngine(threading.Thread):
 
     def print(self, text: str):
         """Print a message to the console."""
-        # TODO - allow defining text color and such ?
-        print(text)
+        self.handlers.on_print(self, text)
 
     def get_dialog(self, name: str) -> str:
         """
@@ -245,42 +244,42 @@ class IFGameEngine(threading.Thread):
     def run(self):
         """Run the game loop."""
         self.running.set()
-        if self.callbacks.on_start:
-            self.callbacks.on_start(self)
+        if self.handlers.on_start:
+            self.handlers.on_start(self)
         self.print(self.active_scene.description)
         while self.running.is_set():
-            if self.callbacks.before_turn:
-                self.callbacks.before_turn(self)
+            if self.handlers.before_turn:
+                self.handlers.before_turn(self)
             utt = input("> ")
 
-            if self.callbacks.before_interaction:
-                self.callbacks.before_interaction(self, utt)
+            if self.handlers.before_interaction:
+                self.handlers.before_interaction(self, utt)
 
             ans = self.active_scene.interact(self, utt)
 
-            if self.callbacks.after_interaction:
-                self.callbacks.after_interaction(self, utt, ans)
+            if self.handlers.after_interaction:
+                self.handlers.after_interaction(self, utt, ans)
 
             if ans:
                 self.print(ans)
 
-            if self.checks.is_win(self):
-                if self.callbacks.on_win:
-                    self.callbacks.on_win(self)
+            if self.handlers.is_win(self):
+                if self.handlers.on_win:
+                    self.handlers.on_win(self)
                 break
-            if self.checks.is_loss(self):
-                if self.callbacks.on_lose:
-                    self.callbacks.on_lose(self)
+            if self.handlers.is_loss(self):
+                if self.handlers.on_lose:
+                    self.handlers.on_lose(self)
                 break
-            if self.callbacks.end_turn:
-                self.callbacks.end_turn(self)
+            if self.handlers.end_turn:
+                self.handlers.end_turn(self)
             self.advance()
-            if self.callbacks.after_turn:
-                self.callbacks.after_turn(self)
+            if self.handlers.after_turn:
+                self.handlers.after_turn(self)
 
         self.running.clear()
-        if self.callbacks.on_end:
-            self.callbacks.on_end(self)
+        if self.handlers.on_end:
+            self.handlers.on_end(self)
 
     def advance(self):
         """advance to next turn"""
